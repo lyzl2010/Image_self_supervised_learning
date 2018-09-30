@@ -294,19 +294,13 @@ def unflatten_2d_array(pts_flt, pts_nd, axis=1, squeeze=False):
 
 
 def decode(data_l, conv8_313, rebalance=1):
-    #print('data_l',type(data_l))
-    #print('shape',data_l.shape)
-    #np.save('data_l.npy',data_l)
     data_l=data_l[0]+50
     data_l=data_l.cpu().data.numpy().transpose((1,2,0))
     conv8_313 = conv8_313[0]
     enc_dir = './resources'
     conv8_313_rh = conv8_313 * rebalance
-    #print('conv8',conv8_313_rh.size())
     class8_313_rh = F.softmax(conv8_313_rh,dim=0).cpu().data.numpy().transpose((1,2,0))
-    #np.save('class8_313.npy',class8_313_rh)
     class8=np.argmax(class8_313_rh,axis=-1)
-    #print('class8',class8.shape)
     cc = np.load(os.path.join(enc_dir, 'pts_in_hull.npy'))
     #data_ab = np.dot(class8_313_rh, cc)
     data_ab=cc[class8[:][:]]
