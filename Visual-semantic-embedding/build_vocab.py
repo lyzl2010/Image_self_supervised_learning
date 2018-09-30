@@ -34,12 +34,8 @@ def build_vocab(json, threshold):
     for i, id in enumerate(ids):
         caption = coco.anns[id]['caption'][1]
         #for caption in captions:
-        #caption = str(caption)
         tokens = list(jieba.cut(caption))
-        #print(tokens)
-    # tokens = nltk.tokenize.word_tokenize(caption.lower())
         counter.update(tokens)
-        #print(tokens)
 
         if (i+1) % 1000 == 0:
             print("[{}/{}] Tokenized the captions.".format(i+1, len(ids)))
