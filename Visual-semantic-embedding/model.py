@@ -34,7 +34,7 @@ def EncoderImage(data_name, img_dim, embed_size, finetune=False,
     return img_enc
 
 
-# tutorials/09 - Image Captioning
+
 class EncoderImageFull(nn.Module):
 
     def __init__(self, embed_size, finetune=False, cnn_type='vgg19',
@@ -179,8 +179,6 @@ class EncoderImagePrecomp(nn.Module):
 
         super(EncoderImagePrecomp, self).load_state_dict(new_state)
 
-
-# tutorials/08 - Language Model
 # RNN Based Language Model
 class EncoderText(nn.Module):
 
