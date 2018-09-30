@@ -28,7 +28,7 @@ def load_image(image_path,transform=None):
 def load_model():
     
     print('start loading model')
-    model_path = "runs/coco_vse++/checkpoint.pth.tar"
+    model_path = "checkpoint.pth.tar"
     vocab_path = "vocab"
     checkpoint = torch.load(model_path)
     print('model load')
@@ -71,7 +71,7 @@ def load_model():
     np.save('names_retrain.npy',np.asarray(names))
 
 def text2img():
-    model_path = "ori_runs/coco_vse++_vggfull/model_best.pth.tar"
+    model_path = "model_best.pth.tar"
     vocab_path="vocab"
     vocab_search_path = "./"
     checkpoint = torch.load(model_path)
@@ -88,8 +88,6 @@ def text2img():
     model = VSE(opt)
     model.load_state_dict(checkpoint['model'])
     print('model loaded')
-    #tokens_dict=["dog is running on grass","baby is washing teeth","cow is drinking","red bottle on table"]
-    #tokens_dict=["dog","cat","baby","red"]
     ims=np.load('val_emb.npy')
     print('img emb loaded')
     name=np.load('names.npy')
@@ -111,12 +109,10 @@ def text2img():
             cap_emb = model.txt_enc(caption,[caption.size()[1]])
             score=cosine_sim(torch.Tensor(ims).cuda(),cap_emb)
             score=score.data.cpu().numpy()
-            #np.save('score_'+token+'.npy',score.data.cpu().numpy())
             ind=np.argsort(score,axis=0)[::-1][:20]
             for id in ind:
                 img_name=name[id][0]
                 copyfile('data/coco/images/val2014/'+img_name,'/mnt/cephfs/lab/wangyuqing/text_retrieval_select/'+token+'/'+img_name)
-            #print(token+' done')
         except:
             pass
     
