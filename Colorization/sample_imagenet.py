@@ -41,8 +41,6 @@ def main():
             image=load_image(data_dir+'/'+file, scale_transform)
             image=image.unsqueeze(0).float().cuda()
             img_ab_313=color_model(image)
-            out_max=np.argmax(img_ab_313[0].cpu().data.numpy(),axis=0)
-            #print('out_max',set(out_max.flatten()))
             color_img=decode(image,img_ab_313)
             color_name = '/mnt/cephfs/lab/wangyuqing/wpix/' + file
             scipy.misc.imsave(color_name, color_img*255.)
