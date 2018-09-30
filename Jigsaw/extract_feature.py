@@ -19,9 +19,7 @@ def main():
     model = nn.DataParallel(Network()).cuda()
     model.load_state_dict(torch.load('../model/models/model-100-76.ckpt'))
     model.eval()
-    #print(model._modules)
     modules = list(list(list(model.children())[0].children())[0])[:-2]
-    #print(modules)
     
     model=nn.Sequential(*modules)
     
@@ -33,13 +31,10 @@ def main():
             img = img.resize([224, 224], Image.LANCZOS)
             img = transforms.ToTensor()(img).unsqueeze_(0).cuda()
             feature = model(img)
-            #print(feature.size())
             avgpool=F.avg_pool2d(feature,kernel_size=26)
             avgpool=avgpool.view(256)
             avgpool=F.normalize(avgpool,dim=0)
-            #print(avgpool.size())
             avgpool=avgpool.data.cpu().numpy().tolist()
-            #feature=feature[0].data.cpu().numpy().tolist()
             avg_item=[file,avgpool]
             f_avg.write('%s\n' % json.dumps(avg_item))
 
