@@ -61,11 +61,6 @@ def main(args):
                 mask=torch.Tensor(nongray_mask.forward(img_ab)).float().cuda()
                 boost_nongray=boost*mask
                 outputs = model(images)#.log()
-                #print('targets',targets.size())
-                #print('outputs',outputs.size())
-                #output=outputs[0].cpu().data.numpy()
-                #out_max=np.argmax(output,axis=0)
-                #print('set',set(out_max.flatten()))
                 loss = (criterion(outputs,targets)*(boost_nongray.squeeze(1))).mean()
                 #loss=criterion(outputs,targets)
                 model.zero_grad()
