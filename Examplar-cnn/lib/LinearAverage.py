@@ -7,10 +7,6 @@ import math
 class LinearAverageOp(Function):
     @staticmethod
     def forward(self, x, y, memory, params):
-        print('memory',memory.size())
-        print('params',params.size())
-        print('x',x.size())
-        print('y',y.size())
         T = params[0]
         batchSize = x.size(0)
         outputSize = memory.size(1)
