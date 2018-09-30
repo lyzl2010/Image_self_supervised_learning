@@ -43,7 +43,6 @@ class EncoderImageFull(nn.Module):
 
         # Load a pre-trained model
         self.cnn = self.get_cnn(cnn_type, True)
-        #self.cnn = self.get_cnn(cnn_type, False)
         # For efficient memory usage.
         for param in self.cnn.parameters():
             param.requires_grad = finetune
@@ -176,7 +175,7 @@ class EncoderImagePrecomp(nn.Module):
         super(EncoderImagePrecomp, self).load_state_dict(new_state)
 
 
-# tutorials/08 - Language Model
+
 # RNN Based Language Model
 class EncoderText(nn.Module):
 
@@ -285,7 +284,6 @@ class VSE(object):
     """
 
     def __init__(self, opt):
-        # tutorials/09 - Image Captioning
         # Build Models
         self.grad_clip = opt.grad_clip
         self.img_enc = EncoderImage(opt.data_name, opt.img_dim, opt.embed_size,
@@ -338,8 +336,6 @@ class VSE(object):
         """Compute the image and caption embeddings
         """
         # Set mini-batch dataset
-        #images = Variable(images, volatile=volatile)
-        #captions = Variable(captions, volatile=volatile)
         if torch.cuda.is_available():
             images = images.cuda()
             captions = captions.cuda()
