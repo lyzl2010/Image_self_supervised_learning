@@ -26,8 +26,7 @@ class NCEFunction(Function):
         # inner product
         out = torch.bmm(weight, x.reshape(batchSize, inputSize, 1))
         out.div_(T).exp_() # batchSize * self.K+1
-        #x.resize_(batchSize, inputSize)
-
+        
         if Z < 0:
             params[2] = out.mean() * outputSize
             Z = params[2]
@@ -43,7 +42,6 @@ class NCEFunction(Function):
     @staticmethod
     def backward(self, gradOutput):
         x, y ,memory, weight, out, params= self.saved_tensors
-        #memory, weight, out, params = self.data_for_backward
         K = int(params[0])
         T = params[1]
         Z = params[2]
