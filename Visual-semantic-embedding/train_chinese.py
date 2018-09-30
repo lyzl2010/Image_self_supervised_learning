@@ -1,183 +1,21 @@
-import pickle
-import os
-import time
-import shutil
-
-import torch
-
-import data
-from vocab import Vocabulary  # NOQA
-from model import VSE
-from evaluation import i2t, t2i, AverageMeter, LogCollector, encode_data
-
-import logging
-import tensorboard_logger as tb_logger
-
 import argparse
+import torch
+import torch.nn
+import numpy as np
+import os
+import pickle
+from model_chinese import VSE
+from data_loader import get_loader
+from build_vocab import Vocabulary
+from torchvision import transforms
 
-
-def main():
-    # Hyper Parameters
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', default='/root/ai_challenger_zip/ai_challenger_caption_train_20170902/',
-                        help='path to datasets')
-    #parser.add_argument('--data_name', default='precomp',
-    #                    help='{coco,f8k,f30k,10crop}_precomp|coco|f8k|f30k')
-    parser.add_argument('--vocab_path', default='./vocab/',
-                        help='Path to saved vocabulary pickle files.')
-    parser.add_argument('--margin', default=0.2, type=float,
-                        help='Rank loss margin.')
-    parser.add_argument('--num_epochs', default=300, type=int,
-                        help='Number of training epochs.')
-    parser.add_argument('--batch_size', default=7168, type=int,
-                        help='Size of a training mini-batch.')
-    parser.add_argument('--word_dim', default=300, type=int,
-                        help='Dimensionality of the word embedding.')
-    parser.add_argument('--embed_size', default=1024, type=int,
-                        help='Dimensionality of the joint embedding.')
-    parser.add_argument('--grad_clip', default=2., type=float,
-                        help='Gradient clipping threshold.')
-    parser.add_argument('--crop_size', default=224, type=int,
-                        help='Size of an image crop as the CNN input.')
-    parser.add_argument('--num_layers', default=1, type=int,
-                        help='Number of GRU layers.')
-    parser.add_argument('--learning_rate', default=.001, type=float,
-                        help='Initial learning rate.')
-    parser.add_argument('--lr_update', default=15, type=int,
-                        help='Number of epochs to update the learning rate.')
-    parser.add_argument('--workers', default=10, type=int,
-                        help='Number of data loader workers.')
-    parser.add_argument('--log_step', default=10, type=int,
-                        help='Number of steps to print and record the log.')
-    #parser.add_argument('--val_step', default=500, type=int,
-    #                    help='Number of steps to run validation.')
-    parser.add_argument('--logger_name', default='runs/runX',
-                        help='Path to save the model and Tensorboard log.')
-    parser.add_argument('--resume', default='', type=str, metavar='PATH',
-                        help='path to latest checkpoint (default: none)')
-    parser.add_argument('--max_violation', action='store_true',
-                        help='Use max instead of sum in the rank loss.')
-    parser.add_argument('--img_dim', default=4096, type=int,
-                        help='Dimensionality of the image embedding.')
-    parser.add_argument('--finetune', action='store_true',
-                        help='Fine-tune the image encoder.')
-    parser.add_argument('--cnn_type', default='vgg19',
-                        help="""The CNN used for image encoder
-                        (e.g. vgg19, resnet152)""")
-    #parser.add_argument('--use_restval', action='store_true',
-    #                    help='Use the restval data for training on MSCOCO.')
-    parser.add_argument('--measure', default='cosine',
-                        help='Similarity measure used (cosine|order)')
-    parser.add_argument('--use_abs', action='store_true',
-                        help='Take the absolute value of embedding vectors.')
-    parser.add_argument('--no_imgnorm', action='store_true',
-                        help='Do not normalize the image embeddings.')
-    parser.add_argument('--reset_train', action='store_true',
-                        help='Ensure the training is always done in '
-                        'train mode (Not recommended).')
-    opt = parser.parse_args()
-    print(opt)
-
-    logging.basicConfig(format='%(asctime)s %(message)s', level=logging.INFO)
-    tb_logger.configure(opt.logger_name, flush_secs=5)
-
-    # Load Vocabulary Wrapper
-    vocab = pickle.load(open(os.path.join(
-        opt.vocab_path, '%s_vocab.pkl' % opt.data_name), 'rb'))
-    opt.vocab_size = len(vocab)
-
-    # Load data loaders
-    train_loader, val_loader = data.get_loaders(
-        opt.data_name, vocab, opt.crop_size, opt.batch_size, opt.workers, opt)
-
-    # Construct the model
-    model = VSE(opt)
-
-    # optionally resume from a checkpoint
-    if opt.resume:
-        if os.path.isfile(opt.resume):
-            print("=> loading checkpoint '{}'".format(opt.resume))
-            checkpoint = torch.load(opt.resume)
-            start_epoch = checkpoint['epoch']
-            best_rsum = checkpoint['best_rsum']
-            model.load_state_dict(checkpoint['model'])
-            # Eiters is used to show logs as the continuation of another
-            # training
-            model.Eiters = checkpoint['Eiters']
-            print("=> loaded checkpoint '{}' (epoch {}, best_rsum {})"
-                  .format(opt.resume, start_epoch, best_rsum))
-        else:
-            print("=> no checkpoint found at '{}'".format(opt.resume))
-
-    # Train the Model
-    best_rsum = 0
-    for epoch in range(opt.num_epochs):
-        adjust_learning_rate(opt, model.optimizer, epoch)
-
-        # train for one epoch
-        train(opt, train_loader, model, epoch, val_loader)
-
-        save_checkpoint({
-            'epoch': epoch + 1,
-            'model': model.state_dict(),
-            'opt': opt,
-            'Eiters': model.Eiters,
-        }, is_best=False, prefix=opt.logger_name + '/')
-
-
-def train(opt, train_loader, model, epoch, val_loader):
-    # average meters to record the training statistics
-    batch_time = AverageMeter()
-    data_time = AverageMeter()
-    train_logger = LogCollector()
-
-    # switch to train mode
-    model.train_start()
-
-    end = time.time()
-    for i, train_data in enumerate(train_loader):
-        if opt.reset_train:
-            # Always reset to train mode, this is not the default behavior
-            model.train_start()
-
-        # measure data loading time
-        data_time.update(time.time() - end)
-
-        # make sure train logger is used
-        model.logger = train_logger
-
-        # Update the model
-        model.train_emb(*train_data)
-
-        # measure elapsed time
-        batch_time.update(time.time() - end)
-        end = time.time()
-
-        # Print log info
-        if model.Eiters % opt.log_step == 0:
-            logging.info(
-                'Epoch: [{0}][{1}/{2}]\t'
-                '{e_log}\t'
-                'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
-                'Data {data_time.val:.3f} ({data_time.avg:.3f})\t'
-                .format(
-                    epoch, i, len(train_loader), batch_time=batch_time,
-                    data_time=data_time, e_log=str(model.logger)))
-
-        # Record logs in tensorboard
-        tb_logger.log_value('epoch', epoch, step=model.Eiters)
-        tb_logger.log_value('step', i, step=model.Eiters)
-        tb_logger.log_value('batch_time', batch_time.val, step=model.Eiters)
-        tb_logger.log_value('data_time', data_time.val, step=model.Eiters)
-        model.logger.tb_log(tb_logger, step=model.Eiters)
-
-
-
-def save_checkpoint(state, is_best, filename='checkpoint.pth.tar', prefix=''):
-    torch.save(state, prefix + filename)
-    if is_best:
-        shutil.copyfile(prefix + filename, prefix + 'model_best.pth.tar')
-
+transform = transforms.Compose([
+        transforms.Scale(256),
+        transforms.RandomCrop(224),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize((0.485, 0.456, 0.406),
+                             (0.229, 0.224, 0.225))])
 
 def adjust_learning_rate(opt, optimizer, epoch):
     """Sets the learning rate to the initial LR
@@ -186,22 +24,77 @@ def adjust_learning_rate(opt, optimizer, epoch):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
 
-
-def accuracy(output, target, topk=(1,)):
-    """Computes the precision@k for the specified values of k"""
-    maxk = max(topk)
-    batch_size = target.size(0)
-
-    _, pred = output.topk(maxk, 1, True, True)
-    pred = pred.t()
-    correct = pred.eq(target.view(1, -1).expand_as(pred))
-
-    res = []
-    for k in topk:
-        correct_k = correct[:k].view(-1).float().sum(0)
-        res.append(correct_k.mul_(100.0 / batch_size))
-    return res
-
+def main(args):
+    with open(args.vocab_path, 'rb') as f:
+        vocab = pickle.load(f)
+        
+    data_loader = get_loader(args.image_dir, args.caption_path, vocab,
+	                         transform, args.batch_size,
+	                         shuffle = True, num_workers = args.num_workers)
+    opt = parser.parse_args()
+    opt.vocab_size = len(vocab)
+    model = VSE(opt)
+    model.load_state_dict(torch.load('models/1/25.ckpt'))
+    total_step = len(data_loader)
+    print(total_step)
+    for epoch in range(args.num_epochs):
+        try:
+            for i,train_data in enumerate(data_loader):
+                model.train_emb(*train_data)
+                if i%10==0:
+                    print('epoch: ',epoch, 'step: ',i)
+            if epoch%5==0:    
+                torch.save(model.state_dict(), os.path.join(args.model_path, '{}.ckpt'.format(epoch)))
+        except:
+            pass
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model_path', type = str, default = 'models/1/',
+                        help = 'path for saving trained models')
+    parser.add_argument('--vocab_path', type = str, default = './vocab.pkl',
+                        help = 'path for vocabulary wrapper')
+    parser.add_argument('--image_dir', type = str,
+                        default = '/root/ai_challenger_zip/ai_challenger_caption_train_20170902',
+                        help = 'directory for resized images')
+    parser.add_argument('--caption_path', type=str, default='./coco_caption_train_annotations_20170902.json', help='path for train annotation json file')
+    parser.add_argument('--margin', default = 0.2, type = float,
+                        help = 'Rank loss margin.')
+    parser.add_argument('--num_epochs', default = 300, type = int,
+                        help = 'Number of training epochs.')
+    parser.add_argument('--batch_size', default = 768, type = int,
+                        help = 'Size of a training mini-batch.')
+    parser.add_argument('--word_dim', default = 300, type = int,
+                        help = 'Dimensionality of the word embedding.')
+    parser.add_argument('--embed_size', default = 1024, type = int,
+                        help = 'Dimensionality of the joint embedding.')
+    parser.add_argument('--grad_clip', default = 2., type = float,
+                        help = 'Gradient clipping threshold.')
+    parser.add_argument('--num_layers', default = 1, type = int,
+                        help = 'Number of GRU layers.')
+    parser.add_argument('--learning_rate', default = .0001, type = float,
+                        help = 'Initial learning rate.')
+    parser.add_argument('--lr_update', default = 15, type = int,
+                        help = 'Number of epochs to update the learning rate.')
+    parser.add_argument('--num_workers', default = 10, type = int,
+                        help = 'Number of data loader workers.')
+    parser.add_argument('--log_step', default = 10, type = int,
+                        help = 'Number of steps to print and record the log.')
+    parser.add_argument('--max_violation', action = 'store_true',
+                        help = 'Use max instead of sum in the rank loss.')
+    parser.add_argument('--img_dim', default = 4096, type = int,
+                        help = 'Dimensionality of the image embedding.')
+    parser.add_argument('--finetune', action = 'store_true',
+                        help = 'Fine-tune the image encoder.')
+    parser.add_argument('--cnn_type', default = 'vgg19',
+                        help = """The CNN used for image encoder
+                            (e.g. vgg19, resnet152)""")
+    parser.add_argument('--measure', default = 'cosine',
+                        help = 'Similarity measure used (cosine|order)')
+    parser.add_argument('--use_abs', action = 'store_true',
+                        help = 'Take the absolute value of embedding vectors.')
+    parser.add_argument('--no_imgnorm', action = 'store_true',
+                        help = 'Do not normalize the image embeddings.')
+    args = parser.parse_args()
+    print(args)
+    main(args)

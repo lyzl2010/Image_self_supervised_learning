@@ -18,12 +18,13 @@ def l2norm(X):
     return X
 
 
-def EncoderImage(img_dim, embed_size, finetune=False,
+def EncoderImage(embed_size, finetune=False,
                  cnn_type='vgg19', use_abs=False, no_imgnorm=False):
     """A wrapper to image encoders. Chooses between an encoder that uses
     precomputed image features, `EncoderImagePrecomp`, or an encoder that
     computes image features on the fly `EncoderImageFull`.
     """
+
     img_enc = EncoderImageFull(
         embed_size, finetune, cnn_type, use_abs, no_imgnorm)
 
@@ -33,7 +34,7 @@ def EncoderImage(img_dim, embed_size, finetune=False,
 # tutorials/09 - Image Captioning
 class EncoderImageFull(nn.Module):
 
-    def __init__(self, embed_size, finetune=True, cnn_type='vgg19',
+    def __init__(self, embed_size, finetune=False, cnn_type='vgg19',
                  use_abs=False, no_imgnorm=False):
         """Load pretrained VGG19 and replace top fc layer."""
         super(EncoderImageFull, self).__init__()
@@ -43,6 +44,7 @@ class EncoderImageFull(nn.Module):
 
         # Load a pre-trained model
         self.cnn = self.get_cnn(cnn_type, True)
+
         # For efficient memory usage.
         for param in self.cnn.parameters():
             param.requires_grad = finetune
@@ -68,7 +70,6 @@ class EncoderImageFull(nn.Module):
         else:
             print("=> creating model '{}'".format(arch))
             model = models.__dict__[arch]()
-
         if arch.startswith('alexnet') or arch.startswith('vgg'):
             model.features = nn.DataParallel(model.features)
             model.cuda()
@@ -126,56 +127,9 @@ class EncoderImageFull(nn.Module):
         return features
 
 
-class EncoderImagePrecomp(nn.Module):
-
-    def __init__(self, img_dim, embed_size, use_abs=False, no_imgnorm=False):
-        super(EncoderImagePrecomp, self).__init__()
-        self.embed_size = embed_size
-        self.no_imgnorm = no_imgnorm
-        self.use_abs = use_abs
-
-        self.fc = nn.Linear(img_dim, embed_size)
-
-        self.init_weights()
-
-    def init_weights(self):
-        """Xavier initialization for the fully connected layer
-        """
-        r = np.sqrt(6.) / np.sqrt(self.fc.in_features +
-                                  self.fc.out_features)
-        self.fc.weight.data.uniform_(-r, r)
-        self.fc.bias.data.fill_(0)
-
-    def forward(self, images):
-        """Extract image feature vectors."""
-        # assuming that the precomputed features are already l2-normalized
-
-        features = self.fc(images)
-
-        # normalize in the joint embedding space
-        if not self.no_imgnorm:
-            features = l2norm(features)
-
-        # take the absolute value of embedding (used in order embeddings)
-        if self.use_abs:
-            features = torch.abs(features)
-
-        return features
-
-    def load_state_dict(self, state_dict):
-        """Copies parameters. overwritting the default one to
-        accept state_dict from Full model
-        """
-        own_state = self.state_dict()
-        new_state = OrderedDict()
-        for name, param in state_dict.items():
-            if name in own_state:
-                new_state[name] = param
-
-        super(EncoderImagePrecomp, self).load_state_dict(new_state)
 
 
-
+# tutorials/08 - Language Model
 # RNN Based Language Model
 class EncoderText(nn.Module):
 
@@ -202,15 +156,19 @@ class EncoderText(nn.Module):
         # Embed word ids to vectors
         x = self.embed(x)
         packed = pack_padded_sequence(x, lengths, batch_first=True)
+
         # Forward propagate RNN
         out, _ = self.rnn(packed)
+
         # Reshape *final* output to (batch_size, hidden_size)
         padded = pad_packed_sequence(out, batch_first=True)
         I = torch.LongTensor(lengths).view(-1, 1, 1)
         I = Variable(I.expand(x.size(0), 1, self.embed_size)-1).cuda()
         out = torch.gather(padded[0], 1, I).squeeze(1)
+
         # normalization in the joint embedding space
         out = l2norm(out)
+
         # take absolute value, used by order embeddings
         if self.use_abs:
             out = torch.abs(out)
@@ -284,9 +242,10 @@ class VSE(object):
     """
 
     def __init__(self, opt):
+        # tutorials/09 - Image Captioning
         # Build Models
         self.grad_clip = opt.grad_clip
-        self.img_enc = EncoderImage(opt.data_name, opt.img_dim, opt.embed_size,
+        self.img_enc = EncoderImage(opt.embed_size,
                                     opt.finetune, opt.cnn_type,
                                     use_abs=opt.use_abs,
                                     no_imgnorm=opt.no_imgnorm)
@@ -320,22 +279,12 @@ class VSE(object):
         self.img_enc.load_state_dict(state_dict[0])
         self.txt_enc.load_state_dict(state_dict[1])
 
-    def train_start(self):
-        """switch to train mode
-        """
-        self.img_enc.train()
-        self.txt_enc.train()
-
-    def val_start(self):
-        """switch to evaluate mode
-        """
-        self.img_enc.eval()
-        self.txt_enc.eval()
-
     def forward_emb(self, images, captions, lengths, volatile=False):
         """Compute the image and caption embeddings
         """
         # Set mini-batch dataset
+        images = Variable(images, volatile=volatile)
+        captions = Variable(captions, volatile=volatile)
         if torch.cuda.is_available():
             images = images.cuda()
             captions = captions.cuda()
@@ -345,19 +294,19 @@ class VSE(object):
         cap_emb = self.txt_enc(captions, lengths)
         return img_emb, cap_emb
 
-    def forward_loss(self, img_emb, cap_emb, **kwargs):
+    def forward_loss(self, img_emb, cap_emb):
         """Compute the loss given pairs of image and caption embeddings
         """
         loss = self.criterion(img_emb, cap_emb)
-        self.logger.update('Le', loss.data[0], img_emb.size(0))
+        #self.logger.update('Loss', loss.data[0], img_emb.size(0))
         return loss
 
-    def train_emb(self, images, captions, lengths, ids=None, *args):
+    def train_emb(self, images, captions, lengths):
         """One training step given images and captions.
         """
         self.Eiters += 1
-        self.logger.update('Eit', self.Eiters)
-        self.logger.update('lr', self.optimizer.param_groups[0]['lr'])
+        #self.logger.update('Eit', self.Eiters)
+        #self.logger.update('lr', self.optimizer.param_groups[0]['lr'])
 
         # compute the embeddings
         img_emb, cap_emb = self.forward_emb(images, captions, lengths)
@@ -365,7 +314,7 @@ class VSE(object):
         # measure accuracy and record loss
         self.optimizer.zero_grad()
         loss = self.forward_loss(img_emb, cap_emb)
-
+        print('loss',loss.item())
         # compute gradient and do SGD step
         loss.backward()
         if self.grad_clip > 0:
