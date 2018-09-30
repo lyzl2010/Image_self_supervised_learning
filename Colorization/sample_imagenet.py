@@ -1,7 +1,7 @@
 import torch
 from torch.autograd import Variable
 from skimage.color import lab2rgb
-from model_pix import Color_model
+from model import Color_model
 #from data_loader import ValImageFolder
 import numpy as np
 from skimage.color import rgb2lab, rgb2gray
@@ -28,7 +28,7 @@ def load_image(image_path,transform=None):
     #image_small=np.expand_dims(rgb2lab(image_small)[:,:,0],axis=-1)
     image=rgb2lab(image)[:,:,0]-50.
     image=torch.from_numpy(image).unsqueeze(0)
-    return image#,image_small
+    return image
 
 def main():
     data_dir = "/mnt/cephfs/lab/wangyuqing/imagenet_val"
