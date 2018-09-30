@@ -91,7 +91,6 @@ class Color_model(nn.Module):
         self.apply(weights_init)
 
     def forward(self, gray_image):
-        #print('gray_image',gray_image.size())
         features=self.features(gray_image)
         features=features/0.38
         return features
