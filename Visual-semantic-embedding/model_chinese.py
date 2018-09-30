@@ -31,7 +31,6 @@ def EncoderImage(embed_size, finetune=False,
     return img_enc
 
 
-# tutorials/09 - Image Captioning
 class EncoderImageFull(nn.Module):
 
     def __init__(self, embed_size, finetune=False, cnn_type='vgg19',
@@ -128,8 +127,6 @@ class EncoderImageFull(nn.Module):
 
 
 
-
-# tutorials/08 - Language Model
 # RNN Based Language Model
 class EncoderText(nn.Module):
 
@@ -242,7 +239,6 @@ class VSE(object):
     """
 
     def __init__(self, opt):
-        # tutorials/09 - Image Captioning
         # Build Models
         self.grad_clip = opt.grad_clip
         self.img_enc = EncoderImage(opt.embed_size,
@@ -298,16 +294,12 @@ class VSE(object):
         """Compute the loss given pairs of image and caption embeddings
         """
         loss = self.criterion(img_emb, cap_emb)
-        #self.logger.update('Loss', loss.data[0], img_emb.size(0))
         return loss
 
     def train_emb(self, images, captions, lengths):
         """One training step given images and captions.
         """
         self.Eiters += 1
-        #self.logger.update('Eit', self.Eiters)
-        #self.logger.update('lr', self.optimizer.param_groups[0]['lr'])
-
         # compute the embeddings
         img_emb, cap_emb = self.forward_emb(images, captions, lengths)
 
