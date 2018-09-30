@@ -18,26 +18,22 @@ def l2norm(X):
     return X
 
 
-def EncoderImage(data_name, img_dim, embed_size, finetune=False,
+def EncoderImage(img_dim, embed_size, finetune=False,
                  cnn_type='vgg19', use_abs=False, no_imgnorm=False):
     """A wrapper to image encoders. Chooses between an encoder that uses
     precomputed image features, `EncoderImagePrecomp`, or an encoder that
     computes image features on the fly `EncoderImageFull`.
     """
-    if data_name.endswith('_precomp'):
-        img_enc = EncoderImagePrecomp(
-            img_dim, embed_size, use_abs, no_imgnorm)
-    else:
-        img_enc = EncoderImageFull(
-            embed_size, finetune, cnn_type, use_abs, no_imgnorm)
+    img_enc = EncoderImageFull(
+        embed_size, finetune, cnn_type, use_abs, no_imgnorm)
 
     return img_enc
 
 
-
+# tutorials/09 - Image Captioning
 class EncoderImageFull(nn.Module):
 
-    def __init__(self, embed_size, finetune=False, cnn_type='vgg19',
+    def __init__(self, embed_size, finetune=True, cnn_type='vgg19',
                  use_abs=False, no_imgnorm=False):
         """Load pretrained VGG19 and replace top fc layer."""
         super(EncoderImageFull, self).__init__()
@@ -47,7 +43,7 @@ class EncoderImageFull(nn.Module):
 
         # Load a pre-trained model
         self.cnn = self.get_cnn(cnn_type, True)
-
+        #self.cnn = self.get_cnn(cnn_type, False)
         # For efficient memory usage.
         for param in self.cnn.parameters():
             param.requires_grad = finetune
@@ -179,6 +175,8 @@ class EncoderImagePrecomp(nn.Module):
 
         super(EncoderImagePrecomp, self).load_state_dict(new_state)
 
+
+# tutorials/08 - Language Model
 # RNN Based Language Model
 class EncoderText(nn.Module):
 
@@ -205,19 +203,15 @@ class EncoderText(nn.Module):
         # Embed word ids to vectors
         x = self.embed(x)
         packed = pack_padded_sequence(x, lengths, batch_first=True)
-
         # Forward propagate RNN
         out, _ = self.rnn(packed)
-
         # Reshape *final* output to (batch_size, hidden_size)
         padded = pad_packed_sequence(out, batch_first=True)
         I = torch.LongTensor(lengths).view(-1, 1, 1)
         I = Variable(I.expand(x.size(0), 1, self.embed_size)-1).cuda()
         out = torch.gather(padded[0], 1, I).squeeze(1)
-
         # normalization in the joint embedding space
         out = l2norm(out)
-
         # take absolute value, used by order embeddings
         if self.use_abs:
             out = torch.abs(out)
@@ -344,8 +338,8 @@ class VSE(object):
         """Compute the image and caption embeddings
         """
         # Set mini-batch dataset
-        images = Variable(images, volatile=volatile)
-        captions = Variable(captions, volatile=volatile)
+        #images = Variable(images, volatile=volatile)
+        #captions = Variable(captions, volatile=volatile)
         if torch.cuda.is_available():
             images = images.cuda()
             captions = captions.cuda()

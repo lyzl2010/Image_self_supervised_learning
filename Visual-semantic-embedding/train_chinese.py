@@ -19,17 +19,17 @@ import argparse
 def main():
     # Hyper Parameters
     parser = argparse.ArgumentParser()
-    parser.add_argument('--data_path', default='/w/31/faghri/vsepp_data/',
+    parser.add_argument('--data_path', default='/root/ai_challenger_zip/ai_challenger_caption_train_20170902/',
                         help='path to datasets')
-    parser.add_argument('--data_name', default='precomp',
-                        help='{coco,f8k,f30k,10crop}_precomp|coco|f8k|f30k')
+    #parser.add_argument('--data_name', default='precomp',
+    #                    help='{coco,f8k,f30k,10crop}_precomp|coco|f8k|f30k')
     parser.add_argument('--vocab_path', default='./vocab/',
                         help='Path to saved vocabulary pickle files.')
     parser.add_argument('--margin', default=0.2, type=float,
                         help='Rank loss margin.')
-    parser.add_argument('--num_epochs', default=30, type=int,
+    parser.add_argument('--num_epochs', default=300, type=int,
                         help='Number of training epochs.')
-    parser.add_argument('--batch_size', default=128, type=int,
+    parser.add_argument('--batch_size', default=7168, type=int,
                         help='Size of a training mini-batch.')
     parser.add_argument('--word_dim', default=300, type=int,
                         help='Dimensionality of the word embedding.')
@@ -41,7 +41,7 @@ def main():
                         help='Size of an image crop as the CNN input.')
     parser.add_argument('--num_layers', default=1, type=int,
                         help='Number of GRU layers.')
-    parser.add_argument('--learning_rate', default=.0002, type=float,
+    parser.add_argument('--learning_rate', default=.001, type=float,
                         help='Initial learning rate.')
     parser.add_argument('--lr_update', default=15, type=int,
                         help='Number of epochs to update the learning rate.')
@@ -49,8 +49,8 @@ def main():
                         help='Number of data loader workers.')
     parser.add_argument('--log_step', default=10, type=int,
                         help='Number of steps to print and record the log.')
-    parser.add_argument('--val_step', default=500, type=int,
-                        help='Number of steps to run validation.')
+    #parser.add_argument('--val_step', default=500, type=int,
+    #                    help='Number of steps to run validation.')
     parser.add_argument('--logger_name', default='runs/runX',
                         help='Path to save the model and Tensorboard log.')
     parser.add_argument('--resume', default='', type=str, metavar='PATH',
@@ -64,8 +64,8 @@ def main():
     parser.add_argument('--cnn_type', default='vgg19',
                         help="""The CNN used for image encoder
                         (e.g. vgg19, resnet152)""")
-    parser.add_argument('--use_restval', action='store_true',
-                        help='Use the restval data for training on MSCOCO.')
+    #parser.add_argument('--use_restval', action='store_true',
+    #                    help='Use the restval data for training on MSCOCO.')
     parser.add_argument('--measure', default='cosine',
                         help='Similarity measure used (cosine|order)')
     parser.add_argument('--use_abs', action='store_true',
@@ -99,14 +99,13 @@ def main():
             print("=> loading checkpoint '{}'".format(opt.resume))
             checkpoint = torch.load(opt.resume)
             start_epoch = checkpoint['epoch']
-            #best_rsum = checkpoint['best_rsum']
+            best_rsum = checkpoint['best_rsum']
             model.load_state_dict(checkpoint['model'])
             # Eiters is used to show logs as the continuation of another
             # training
             model.Eiters = checkpoint['Eiters']
             print("=> loaded checkpoint '{}' (epoch {}, best_rsum {})"
                   .format(opt.resume, start_epoch, best_rsum))
-            #validate(opt, val_loader, model)
         else:
             print("=> no checkpoint found at '{}'".format(opt.resume))
 
@@ -118,21 +117,13 @@ def main():
         # train for one epoch
         train(opt, train_loader, model, epoch, val_loader)
 
-        # evaluate on validation set
-        #rsum = validate(opt, val_loader, model)
-
-        # remember best R@ sum and save checkpoint
-        #is_best = rsum > best_rsum
-        #best_rsum = max(rsum, best_rsum)
-        '''
         save_checkpoint({
             'epoch': epoch + 1,
             'model': model.state_dict(),
-            #'best_rsum': best_rsum,
             'opt': opt,
             'Eiters': model.Eiters,
-        }, is_best, prefix=opt.logger_name + '/')
-        '''
+        }, is_best=False, prefix=opt.logger_name + '/')
+
 
 def train(opt, train_loader, model, epoch, val_loader):
     # average meters to record the training statistics
@@ -179,7 +170,6 @@ def train(opt, train_loader, model, epoch, val_loader):
         tb_logger.log_value('batch_time', batch_time.val, step=model.Eiters)
         tb_logger.log_value('data_time', data_time.val, step=model.Eiters)
         model.logger.tb_log(tb_logger, step=model.Eiters)
-
 
 
 
