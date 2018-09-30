@@ -15,8 +15,8 @@ import os
 
 scale_transform = transforms.Compose([
     transforms.Scale(224),
-    transforms.CenterCrop(224),
-    #transforms.RandomCrop(224),
+    #transforms.CenterCrop(224),
+    transforms.RandomCrop(224),
 ])
 
 def load_image(image_path,transform=None):
